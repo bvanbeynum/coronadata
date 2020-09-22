@@ -3,124 +3,65 @@ import requests
 import json
 import re
 import datetime
+import sys
+
+client = pymongo.MongoClient("mongodb://corona:covid19@172.17.0.2:27017/?authSource=corona")
+db = client["corona"]
+countryDB = db["countries"]
+
+countriesToday = countryDB.count_documents({ "date": datetime.datetime.today().strftime("%Y-%m-%d") })
+
+if countriesToday > 0:
+	print(datetime.datetime.today().strftime("%Y-%m-%d") + " - " + str(countriesToday) + " countries already loaded for today")
+	sys.exit()
+
+def LoadState(url):
+	response = requests.get(url)
+	data = json.loads(response.text)
+	html = data["parse"]["text"]["*"]
+	
+	match = re.search("<tbody", html, flags = re.IGNORECASE)
+	start = match.span()[0]
+	match = re.search("</tbody>", html, flags = re.IGNORECASE)
+	end = match.span()[1]
+	
+	dataTable = html[start:end]
+	rows = re.split("<tr", dataTable, flags = re.IGNORECASE)
+	
+	stateData = []
+	
+	for index, row in enumerate(rows):
+		if re.search("_county,", row, flags = re.IGNORECASE) is not None:
+			cells = re.split("<t[h|d]", row, flags = re.IGNORECASE)
+			
+			match = re.search(">([^<]+)<", cells[1], flags = re.IGNORECASE)
+			county = match.group(1).replace("&amp;", "&")
+			
+			match = re.search(">([\d,]+)[\r\n ]*<", cells[2], flags = re.IGNORECASE)
+			if match is not None:
+				cases = int(match.group(1).replace(",", ""))
+			else:
+				cases = -1
+			
+			match = re.search(">([\d,]+)[\r\n ]*<", cells[3], flags = re.IGNORECASE)
+			if match is not None:
+				deaths = int(match.group(1).replace(",", ""))
+			else:
+				deaths = -1
+			
+			stateData.append({ "date": datetime.datetime.today().strftime("%Y-%m-%d"), "county": county, "cases": cases, "deaths": deaths })
+	
+	return stateData
 
 # ************************** Load SC
 
-response = requests.get("https://en.wikipedia.org/w/api.php?action=parse&prop=text&format=json&page=2020_coronavirus_pandemic_in_South_Carolina&section=4")
-data = json.loads(response.text)
-html = data["parse"]["text"]["*"]
-
-match = re.search("<tbody", html, flags = re.IGNORECASE)
-start = match.span()[0]
-match = re.search("</tbody>", html, flags = re.IGNORECASE)
-end = match.span()[1]
-
-dataTable = html[start:end]
-rows = re.split("<tr", dataTable, flags = re.IGNORECASE)
-
-scData = []
-
-for index, row in enumerate(rows):
-	if re.search("county,_south_carolina", row, flags = re.IGNORECASE) is not None:
-		cells = re.split("<t[h|d]", row, flags = re.IGNORECASE)
-		
-		match = re.search(">([^<]+)<", cells[1], flags = re.IGNORECASE)
-		county = match.group(1).replace("&amp;", "&")
-		
-		match = re.search(">([\d,]+)[\r\n ]*<", cells[2], flags = re.IGNORECASE)
-		if match is not None:
-			cases = int(match.group(1).replace(",", ""))
-		else:
-			cases = -1
-		
-		match = re.search(">([\d,]+)[\r\n ]*<", cells[3], flags = re.IGNORECASE)
-		if match is not None:
-			deaths = int(match.group(1).replace(",", ""))
-		else:
-			deaths = -1
-		
-		scData.append({ "date": datetime.datetime.today().strftime("%Y-%m-%d"), "county": county, "cases": cases, "deaths": deaths })
-
-# ************************** Load NC
-
-response = requests.get("https://en.wikipedia.org/w/api.php?action=parse&prop=text&format=json&page=2020_coronavirus_pandemic_in_North_Carolina&section=8")
-data = json.loads(response.text)
-html = data["parse"]["text"]["*"]
-
-match = re.search("Cases_by_county", html, flags = re.IGNORECASE)
-start = match.span()[0]
-htmlTrim = html[start:]
-
-match = re.search("</tbody>", htmlTrim, flags = re.IGNORECASE)
-end = match.span()[1]
-
-dataTable = htmlTrim[:end]
-rows = re.split("<tr", dataTable, flags = re.IGNORECASE)
-
-ncData = []
-
-for index, row in enumerate(rows):
-	if re.search("county,_north_carolina", row, flags = re.IGNORECASE) is not None:
-		cells = re.split("<t[h|d]", row, flags = re.IGNORECASE)
-		
-		match = re.search(">([^<]+)<", cells[1], flags = re.IGNORECASE)
-		county = match.group(1).replace("&amp;", "&")
-		
-		match = re.search(">([\d,]+)[\r\n ]*<", cells[2], flags = re.IGNORECASE)
-		if match is not None:
-			cases = int(match.group(1).replace(",", ""))
-		else:
-			cases = -1
-		
-		match = re.search(">([\d,]+)[\r\n ]*<", cells[3], flags = re.IGNORECASE)
-		if match is not None:
-			deaths = int(match.group(1).replace(",", ""))
-		else:
-			deaths = -1
-		
-		ncData.append({ "date": datetime.datetime.today().strftime("%Y-%m-%d"), "county": county, "cases": cases, "deaths": deaths })
-
-
-# ************************** Load WA
-
-response = requests.get("https://en.wikipedia.org/w/api.php?action=parse&prop=text&format=json&page=2020_coronavirus_pandemic_in_Washington_(state)&section=19")
-data = json.loads(response.text)
-html = data["parse"]["text"]["*"]
-
-match = re.search("<tbody", html, flags = re.IGNORECASE)
-start = match.span()[0]
-match = re.search("</tbody>", html, flags = re.IGNORECASE)
-end = match.span()[1]
-
-dataTable = html[start:end]
-rows = re.split("<tr", dataTable, flags = re.IGNORECASE)
-
-waData = []
-
-for index, row in enumerate(rows):
-	if re.search("county,_washington", row, flags = re.IGNORECASE) is not None:
-		cells = re.split("<t[h|d]", row, flags = re.IGNORECASE)
-		
-		match = re.search(">([^<]+)<", cells[1], flags = re.IGNORECASE)
-		county = match.group(1).replace("&amp;", "&")
-		
-		match = re.search(">([\d,]+)[\r\n ]*<", cells[2], flags = re.IGNORECASE)
-		if match is not None:
-			cases = int(match.group(1).replace(",", ""))
-		else:
-			cases = -1
-		
-		match = re.search(">([\d,]+)[\r\n ]*<", cells[3], flags = re.IGNORECASE)
-		if match is not None:
-			deaths = int(match.group(1).replace(",", ""))
-		else:
-			deaths = -1
-		
-		waData.append({ "date": datetime.datetime.today().strftime("%Y-%m-%d"), "county": county, "cases": cases, "deaths": deaths })
+scData = LoadState("https://en.wikipedia.org/w/api.php?action=parse&prop=text&format=json&page=Template:COVID-19_pandemic_data/South_Carolina_medical_cases_by_county")
+ncData = LoadState("https://en.wikipedia.org/w/api.php?action=parse&prop=text&format=json&page=COVID-19_pandemic_in_North_Carolina&section=6")
+waData = LoadState("https://en.wikipedia.org/w/api.php?action=parse&prop=text&format=json&page=COVID-19_pandemic_in_Washington_(state)")
 
 # ************************** Load States
 
-response = requests.get("https://en.wikipedia.org/w/api.php?action=parse&prop=text&format=json&page=Template:2019%E2%80%9320_coronavirus_pandemic_data/United_States_medical_cases_by_state&section=0")
+response = requests.get("https://en.wikipedia.org/w/api.php?action=parse&prop=text&format=json&page=Template:COVID-19_pandemic_data/United_States_medical_cases_by_state&section=0")
 data = json.loads(response.text)
 html = data["parse"]["text"]["*"]
 
@@ -169,7 +110,7 @@ for index, row in enumerate(rows):
 
 # ************************** Load Countries
 
-response = requests.get("https://en.wikipedia.org/w/api.php?action=parse&prop=text&format=json&page=2019%E2%80%9320_coronavirus_pandemic_by_country_and_territory&section=1")
+response = requests.get("https://en.wikipedia.org/w/api.php?action=parse&prop=text&format=json&page=COVID-19_pandemic_by_country_and_territory&section=1")
 data = json.loads(response.text)
 html = data["parse"]["text"]["*"]
 
@@ -180,8 +121,6 @@ end = match.span()[1]
 
 dataTable = html[start:end]
 rows = re.split("<tr", dataTable, flags = re.IGNORECASE)
-
-print("rows: " + str(len(rows)))
 
 countryData = []
 
@@ -235,3 +174,5 @@ if len(ncData) > 0:
 if len(waData) > 0:
 	waDB = db["wa"]
 	waDB.insert_many(waData)
+
+print(datetime.datetime.today().strftime("%Y-%m-%d") + " - country: " + str(len(countryData)) + ", state: " + str(len(scData)) + ", SC: " + str(len(countryData)) + ", NC: " + str(len(ncData)) + ", WA: " + str(len(waData)))
